@@ -90,7 +90,7 @@ func (c *Client) SubscribeCandles(ctx context.Context, symbol string, resolution
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanCandles,
-		Key:     fmt.Sprintf("trade:%s:t%s", resolution, symbol),
+		Key:     fmt.Sprintf("trade:%s:%s", resolution, symbol),
 	}
 	return c.Subscribe(ctx, req)
 }
