@@ -1,11 +1,13 @@
 package rest
 
 import (
-	"github.com/bitfinexcom/bitfinex-api-go/v2"
-	"path"
-	"strings"
-	"net/url"
 	"fmt"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
+
+	"github.com/bitfinexcom/bitfinex-api-go/v2"
 )
 
 // CandleService manages the Candles endpoint.
@@ -19,9 +21,9 @@ func (c *CandleService) Last(symbol string, resolution bitfinex.CandleResolution
 		return nil, fmt.Errorf("symbol cannot be empty")
 	}
 
-	segments := []string{ "trade", string(resolution), symbol }
+	segments := []string{"trade", string(resolution), symbol}
 
-	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments,":"), "LAST"), "GET")
+	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments, ":"), "LAST"), "GET")
 	req.Params = make(url.Values)
 	raw, err := c.Request(req)
 
@@ -44,9 +46,9 @@ func (c *CandleService) History(symbol string, resolution bitfinex.CandleResolut
 		return nil, fmt.Errorf("symbol cannot be empty")
 	}
 
-	segments := []string{ "trade", string(resolution), symbol }
+	segments := []string{"trade", string(resolution), symbol}
 
-	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments,":"), "HIST"), "GET")
+	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments, ":"), "HIST"), "GET")
 
 	raw, err := c.Request(req)
 
@@ -76,7 +78,6 @@ func (c *CandleService) History(symbol string, resolution bitfinex.CandleResolut
 	return cs, nil
 }
 
-
 // Return Candles for the public account.
 func (c *CandleService) HistoryWithQuery(
 	symbol string,
@@ -85,23 +86,21 @@ func (c *CandleService) HistoryWithQuery(
 	end bitfinex.Mts,
 	limit bitfinex.QueryLimit,
 	sort bitfinex.SortOrder,
-	) (*bitfinex.CandleSnapshot, error) {
+) (*bitfinex.CandleSnapshot, error) {
 
-		if symbol == "" {
+	if symbol == "" {
 		return nil, fmt.Errorf("symbol cannot be empty")
 	}
 
-	segments := []string{ "trade", string(resolution), symbol }
+	segments := []string{"trade", string(resolution), symbol}
 
-	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments,":"), "HIST"), "GET")
+	req := NewRequestWithMethod(path.Join("candles", strings.Join(segments, ":"), "HIST"), "GET")
 	req.Params = make(url.Values)
 
-	//req.Params.Add("end", strconv.FormatInt(start, 10))
-	//req.Params.Add("end", strconv.FormatInt(start, 10))
-	req.Params.Add("end", string(end))
-	req.Params.Add("start", string(start))
-	req.Params.Add("limit", string(limit))
-	req.Params.Add("sort", string(sort))
+	req.Params.Add("end", strconv.Itoa(int(end)))
+	req.Params.Add("start", strconv.Itoa(int(start)))
+	req.Params.Add("limit", strconv.Itoa(int(limit)))
+	req.Params.Add("sort", strconv.Itoa(int(sort)))
 
 	raw, err := c.Request(req)
 
