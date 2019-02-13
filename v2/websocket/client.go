@@ -366,10 +366,10 @@ func (c *Client) listenUpstream() {
 		case msg := <-c.asynchronous.Listen():
 			if msg != nil {
 				// Errors here should be non critical so we just log them.
-				//log.Printf("[DEBUG]: %s\n", msg)
+				// log.Printf("[DEBUG]: %s\n", msg)
 				err := c.handleMessage(msg)
 				if err != nil {
-					log.Printf("[WARN]: %s\n", err)
+					log.Printf("[WARN]: %s, msg : %s\n", err, string(msg))
 				}
 			}
 		}

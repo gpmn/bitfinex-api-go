@@ -9,7 +9,7 @@ import (
 
 type FlagRequest struct {
 	Event string `json:"event"`
-	Flags int `json:"flags"`
+	Flags int    `json:"flags"`
 }
 
 // API for end-users to interact with Bitfinex.
@@ -48,7 +48,7 @@ func (c *Client) SubscribeTicker(ctx context.Context, symbol string) (string, er
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanTicker,
-		Symbol:  symbol,
+		Symbol:  bitfinex.TradingPrefix + symbol,
 	}
 	return c.Subscribe(ctx, req)
 }
@@ -59,7 +59,7 @@ func (c *Client) SubscribeTrades(ctx context.Context, symbol string) (string, er
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanTrades,
-		Symbol:  symbol,
+		Symbol:  bitfinex.TradingPrefix + symbol,
 	}
 	return c.Subscribe(ctx, req)
 }
@@ -74,7 +74,7 @@ func (c *Client) SubscribeBook(ctx context.Context, symbol string, precision bit
 		SubID:     c.nonce.GetNonce(),
 		Event:     EventSubscribe,
 		Channel:   ChanBook,
-		Symbol:    symbol,
+		Symbol:    bitfinex.TradingPrefix + symbol,
 		Precision: string(precision),
 		Len:       fmt.Sprintf("%d", priceLevel), // needed for R0?
 	}
@@ -90,7 +90,7 @@ func (c *Client) SubscribeCandles(ctx context.Context, symbol string, resolution
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanCandles,
-		Key:     fmt.Sprintf("trade:%s:%s", resolution, symbol),
+		Key:     fmt.Sprintf("trade:%s:t%s", resolution, symbol),
 	}
 	return c.Subscribe(ctx, req)
 }
