@@ -48,7 +48,7 @@ func (c *Client) SubscribeTicker(ctx context.Context, symbol string) (string, er
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanTicker,
-		Symbol:  bitfinex.TradingPrefix + symbol,
+		Symbol:  symbol,
 	}
 	return c.Subscribe(ctx, req)
 }
@@ -59,7 +59,7 @@ func (c *Client) SubscribeTrades(ctx context.Context, symbol string) (string, er
 		SubID:   c.nonce.GetNonce(),
 		Event:   EventSubscribe,
 		Channel: ChanTrades,
-		Symbol:  bitfinex.TradingPrefix + symbol,
+		Symbol:  symbol,
 	}
 	return c.Subscribe(ctx, req)
 }
@@ -74,7 +74,7 @@ func (c *Client) SubscribeBook(ctx context.Context, symbol string, precision bit
 		SubID:     c.nonce.GetNonce(),
 		Event:     EventSubscribe,
 		Channel:   ChanBook,
-		Symbol:    bitfinex.TradingPrefix + symbol,
+		Symbol:    symbol,
 		Precision: string(precision),
 		Len:       fmt.Sprintf("%d", priceLevel), // needed for R0?
 	}
