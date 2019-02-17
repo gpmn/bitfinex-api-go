@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -44,10 +45,11 @@ func (w *ws) Connect() error {
 	defer w.wsLock.Unlock()
 	w.userShutdown = false
 	var d = websocket.Dialer{
-		Subprotocols:    []string{"p1", "p2"},
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		Proxy:           http.ProxyFromEnvironment,
+		Subprotocols:     []string{"p1", "p2"},
+		ReadBufferSize:   1024,
+		WriteBufferSize:  1024,
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: time.Second * 15,
 	}
 
 	d.TLSClientConfig = &tls.Config{InsecureSkipVerify: w.TLSSkipVerify}

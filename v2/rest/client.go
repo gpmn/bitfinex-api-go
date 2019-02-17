@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/bitfinexcom/bitfinex-api-go/utils"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"time"
+
+	"github.com/bitfinexcom/bitfinex-api-go/utils"
 )
 
 var productionBaseURL = "https://api.bitfinex.com/v2/"
@@ -63,10 +65,13 @@ func NewClientWithURLHttpDo(base string, httpDo func(c *http.Client, r *http.Req
 
 func NewClientWithURLHttpDoNonce(base string, httpDo func(c *http.Client, r *http.Request) (*http.Response, error), nonce utils.NonceGenerator) *Client {
 	url, _ := url.Parse(base)
+	client := &http.Client{
+		Timeout: time.Duration(time.Second * 30),
+	}
 	sync := &HttpTransport{
 		BaseURL:    url,
 		httpDo:     httpDo,
-		HTTPClient: http.DefaultClient,
+		HTTPClient: client,
 	}
 	return NewClientWithSynchronousNonce(sync, nonce)
 }

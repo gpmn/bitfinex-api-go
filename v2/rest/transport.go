@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 )
@@ -19,6 +20,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 
 	rel, err := url.Parse(req.RefURL)
 	if err != nil {
+		log.Printf("HttpTransport.Request - url.Parse failed : %v", err)
 		return nil, err
 	}
 	if req.Params != nil {
@@ -30,6 +32,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 
 	b, err := json.Marshal(req.Data)
 	if err != nil {
+		log.Printf("HttpTransport.Request - json.Marshal failed : %v", err)
 		return nil, err
 	}
 
@@ -41,11 +44,13 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 		httpReq.Header.Add(k, v)
 	}
 	if err != nil {
+		log.Printf("HttpTransport.Request - http.NewRequest failed : %v", err)
 		return nil, err
 	}
 
 	resp, err := h.do(httpReq, &raw)
 	if err != nil {
+		log.Printf("HttpTransport.Request - http.do failed : %v", err)
 		if resp != nil {
 			return nil, fmt.Errorf("could not parse response: %s", resp.Response.Status)
 		} else {
@@ -61,6 +66,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	resp, err := h.httpDo(h.HTTPClient, req)
 	if err != nil {
+		log.Printf("HttpTransport.do - h.httpDo failed : %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -74,6 +80,7 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	if v != nil {
 		err = json.Unmarshal(response.Body, v)
 		if err != nil {
+			log.Printf("HttpTransport.do - json.Unmarshal failed : %v", err)
 			return response, err
 		}
 	}

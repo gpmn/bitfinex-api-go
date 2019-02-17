@@ -2,6 +2,7 @@ package rest
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"path"
 	"strconv"
@@ -105,6 +106,7 @@ func (c *CandleService) HistoryWithQuery(
 	raw, err := c.Request(req)
 
 	if err != nil {
+		log.Printf("Candles.HistoryWithQuery - c.Request failed : %v", err)
 		return nil, err
 	}
 
@@ -124,6 +126,7 @@ func (c *CandleService) HistoryWithQuery(
 	cs, err := bitfinex.NewCandleSnapshotFromRaw(symbol, resolution, data)
 
 	if err != nil {
+		log.Printf("Candles.HistoryWithQuery - bitfinex.NewCandleSnapshotFromRaw failed : %v", err)
 		return nil, err
 	}
 

@@ -41,6 +41,9 @@ func (s *SubscriptionRequest) String() string {
 	if s.Channel != "" && s.Symbol != "" {
 		return fmt.Sprintf("%s %s", s.Channel, s.Symbol)
 	}
+	if s.Channel != "" && s.Key != "" {
+		return fmt.Sprintf("%s %s", s.Channel, s.Key)
+	}
 	return ""
 }
 
@@ -253,7 +256,7 @@ func (s *subscriptions) activate(subID string, chanID int64) error {
 	defer s.lock.Unlock()
 	if sub, ok := s.subsBySubID[subID]; ok {
 		if chanID != 0 {
-			log.Printf("activated subscription %s %s for channel %d", sub.Request.Channel, sub.Request.Symbol, chanID)
+			log.Printf("activated subscription %s %s %s for channel %d", sub.Request.Channel, sub.Request.Symbol, sub.Request.Key, chanID)
 		}
 		sub.pending = false
 		sub.ChanID = chanID
