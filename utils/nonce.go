@@ -58,3 +58,16 @@ func GetNonce() string {
 	}
 	return strconv.FormatUint(lNonce+offset, 10)
 }
+
+// GetNonceInt64 :
+func GetNonceInt64() int64 {
+	lock.Lock()
+	defer lock.Unlock()
+	lNonce := uint64(time.Now().Unix()) * 1000
+	if offset >= 999 {
+		offset = 0
+	} else {
+		offset++
+	}
+	return int64(lNonce + offset)
+}
