@@ -17,7 +17,7 @@ type HttpTransport struct {
 
 func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 	var raw []interface{}
-
+	//log.Printf("HttpTransport.Request - visit %s", req.RefURL)
 	rel, err := url.Parse(req.RefURL)
 	if err != nil {
 		log.Printf("HttpTransport.Request - url.Parse failed : %v", err)
@@ -64,6 +64,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 
 // Do executes API request created by NewRequest method or custom *http.Request.
 func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
+	log.Printf("visit : %s", req.URL)
 	resp, err := h.httpDo(h.HTTPClient, req)
 	if err != nil {
 		log.Printf("HttpTransport.do - h.httpDo failed : %v", err)

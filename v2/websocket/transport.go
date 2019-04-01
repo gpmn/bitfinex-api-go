@@ -54,7 +54,7 @@ func (w *ws) Connect() error {
 
 	d.TLSClientConfig = &tls.Config{InsecureSkipVerify: w.TLSSkipVerify}
 
-	log.Printf("connecting ws to %s", w.BaseURL)
+	//log.Printf("connecting ws to %s", w.BaseURL)
 	ws, resp, err := d.Dial(w.BaseURL, nil)
 	if err != nil {
 		if err == websocket.ErrBadHandshake {
