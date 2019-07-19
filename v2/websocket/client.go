@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode"
 
-	"cloud.google.com/go/logging"
 	"github.com/bitfinexcom/bitfinex-api-go/utils"
+	"github.com/op/go-logging"
 
 	"crypto/hmac"
 	"crypto/sha512"

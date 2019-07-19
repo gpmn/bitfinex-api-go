@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/logging"
+	"github.com/op/go-logging"
 )
 
 type SubscriptionRequest struct {

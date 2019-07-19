@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/logging"
 	"github.com/gorilla/websocket"
+	"github.com/op/go-logging"
 )
 
 func newWs(baseURL string, logTransport bool, log *logging.Logger) *ws {
