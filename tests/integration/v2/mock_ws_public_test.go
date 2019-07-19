@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	bitfinex "github.com/bitfinexcom/bitfinex-api-go/v2"
+	"github.com/bitfinexcom/bitfinex-api-go/v2"
 	"github.com/bitfinexcom/bitfinex-api-go/v2/websocket"
 )
 
@@ -128,21 +128,101 @@ func TestOrderbook(t *testing.T) {
 	async.Publish(`{"event":"subscribed","channel":"book","chanId":81757,"symbol":"tXRPBTC","prec":"P0","freq":"F0","len":"25","subId":"` + bId + `","pair":"XRPBTC"}`)
 
 	// publish a snapshot
-	async.Publish(`[81757,[[0.000089,1,185.25362178],[0.00008898,1,1000],[0.00008896,2,4727.04575171],[0.00008895,2,21458.69508413],[0.00008893,1,4376.42464394],[0.00008892,2,3368.61853124],[0.00008891,1,19883.51942917],[0.0000889,3,9435.62761455],[0.00008889,3,2028.31355429],[0.00008887,2,1648.2231714],[0.00008885,1,2759.9202752],[0.00008881,1,54317.999],[0.00008879,1,20000],[0.00008875,1,2500],[0.00008873,1,623.90816043],[0.00008867,2,1623.72590867],[0.00008863,1,1001],[0.00008862,1,81476.999],[0.00008861,2,31514.63403132],[0.0000886,1,200000],[0.00008855,1,14000],[0.00008854,1,812.50832839],[0.00008851,1,1000],[0.0000885,1,100],[0.00008847,2,74338],[0.00008901,1,-1067.2702412],[0.00008905,1,-18296.32986369],[0.00008906,1,-15678.6],[0.00008907,1,-2696.32625547],[0.0000891,1,-2247.09217145],[0.00008911,1,-28169.38978256],[0.00008912,2,-7862.51772819],[0.00008913,1,-4491.60631071],[0.00008917,1,-2246.34063345],[0.00008918,3,-2502.36695768],[0.00008919,1,-2759.8023267],[0.0000892,1,-1716.543113],[0.00008923,3,-9841.07336657],[0.00008925,1,-2500],[0.00008929,1,-54317.999],[0.0000893,1,-20000],[0.00008931,2,-1779.82438355],[0.00008932,1,-3000],[0.00008934,1,-1626.72409133],[0.00008935,1,-7600],[0.00008937,1,-1655.81250531],[0.0000894,1,-14000],[0.00008943,1,-24069.65852907],[0.00008944,2,-8600],[0.00008946,1,-1768.039406]]]`)
+	async.Publish(`[81757,[[0.0000011,13,271510.49],[0.00000109,4,500793.10790141],[0.00000108,5,776367.43],[0.00000107,1,23329.54842056],[0.00000106,3,116868.87735849],[0.00000105,3,205000],[0.00000103,3,227308.25386407],[0.00000102,2,105000],[0.00000101,1,2970],[0.000001,2,21000],[7e-7,1,10000],[6.6e-7,1,10000],[6e-7,1,100000],[4.9e-7,1,10000],[2.5e-7,1,2000],[6e-8,1,100000],[5e-8,1,200000],[1e-8,4,640000],[0.00000111,1,-4847.13],[0.00000112,7,-528102.69042633],[0.00000113,5,-302397.07],[0.00000114,3,-339088.93],[0.00000126,4,-245944.06],[0.00000127,1,-5000],[0.0000013,1,-5000],[0.00000134,1,-8249.18938656],[0.00000136,1,-13161.25184766],[0.00000145,1,-2914],[0.0000015,3,-54448.5],[0.00000152,2,-5538.54849594],[0.00000153,1,-62691.75475079],[0.00000159,1,-2914],[0.0000016,1,-52631.10296831],[0.00000164,1,-4000],[0.00000166,1,-3831.46784605],[0.00000171,1,-14575.17730379],[0.00000174,1,-3124.81815395],[0.0000018,1,-18000],[0.00000182,1,-16000],[0.00000186,1,-4000],[0.00000189,1,-10000.686624],[0.00000191,1,-14500],[0.00000193,1,-2422]]]`)
 
 	// publish new trade update
-	async.Publish(`[81757,[0.00008918,2,-1379.90652441]]`)
+	async.Publish(`[81757,[0.0000011,12,266122.94]]`)
+
+	// test that we can retrieve the orderbook
+	ob, err_ob := ws.GetOrderbook("tXRPBTC")
+	if err_ob != nil {
+		t.Fatal(err_ob)
+	}
+
+	// test that changing the orderbook values will not invalidate the checksum
+	// since they have been dereferenced
+	ob.Bids()[0].Amount = 9999999
 
 	// publish new checksum
 	pre := async.SentCount()
-	async.Publish(`[81757,"cs",1217733465]`)
+	async.Publish(`[81757,"cs",-1175357890]`)
 
+	// test that the new trade has been added to the orderbook
+	newTrade := ob.Bids()[0]
+	// check that it has overwritten the original trade in the book at that price
+	if newTrade.PriceJsNum.String() != "0.0000011" {
+		t.Fatal("Newly submitted trade did not update into orderbook")
+	}
+	if newTrade.AmountJsNum.String() != "266122.94" {
+		t.Fatal("Newly submitted trade did not update into orderbook")
+	}
 	// check that we did not send an unsubscribe message
-	// because that woul mean the checksum was incorrect
+	// because that would mean the checksum was incorrect
 	if err_unsub := async.waitForMessage(pre); err_unsub != nil {
 		// no message sent
 		return
 	} else {
 		t.Fatal("A new unsubscribe message was sent")
+	}
+}
+
+func TestCreateNewSocket(t *testing.T) {
+	// create transport & nonce mocks
+	async := newTestAsync()
+
+	// create client
+	p := websocket.NewDefaultParameters()
+	// lock the capacity to 10
+	p.CapacityPerConnection = 10
+	p.ManageOrderbook = true
+	ws := websocket.NewWithParamsAsyncFactory(p, newTestAsyncFactory(async))
+
+	// setup listener
+	listener := newListener()
+	listener.run(ws.Listen())
+
+	// set ws options
+	err_ws := ws.Connect()
+	if err_ws != nil {
+		t.Fatal(err_ws)
+	}
+	defer ws.Close()
+
+	// info welcome msg
+	async.Publish(`{"event":"info","version":2}`)
+	ev, err := listener.nextInfoEvent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert(t, &websocket.InfoEvent{Version: 2}, ev)
+
+	tickers := []string{"tBTCUSD", "tETHUSD", "tBTCUSD", "tVETUSD", "tDGBUSD", "tEOSUSD", "tTRXUSD", "tEOSETH", "tBTCETH",
+		"tBTCEOS", "tXRPUSD", "tXRPBTC", "tTRXETH", "tTRXBTC", "tLTCUSD", "tLTCBTC", "tLTCETH"}
+	for i, ticker := range tickers {
+		id := i*10
+		// subscribe to 15m candles
+		id1, err := ws.SubscribeCandles(context.Background(), ticker, bitfinex.FifteenMinutes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		async.Publish(`{"event":"subscribed","channel":"candles","chanId":`+string(id)+`,"key":"trade:15m:`+ticker+`","subId":"`+id1+`"}`)
+		// subscribe to 1hr candles
+		id2, err := ws.SubscribeCandles(context.Background(), ticker, bitfinex.OneHour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// subscribe ack
+		async.Publish(`{"event":"subscribed","channel":"candles","chanId":`+string(id+1)+`,"key":"trade:1hr:`+ticker+`","subId":"`+id2+`"}`)
+		// subscribe to 30min candles
+		id3, err := ws.SubscribeCandles(context.Background(), ticker, bitfinex.OneHour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// subscribe ack
+		async.Publish(`{"event":"subscribed","channel":"candles","chanId":`+string(id+2)+`,"key":"trade:30m:`+ticker+`","subId":"`+id3+`"}`)
+	}
+	conCount := ws.ConnectionCount()
+	if conCount != 6 {
+		t.Fatal("Expected socket count to be 6 but got", conCount)
 	}
 }

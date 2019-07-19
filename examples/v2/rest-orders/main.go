@@ -12,7 +12,7 @@ import (
 
 var (
 	orderid = flag.String("id", "", "lookup trades for an order ID")
-	api     = flag.String("api", "https://api.bitfinex.com/v2/", "v2 REST API URL")
+	api     = flag.String("api", "https://api-pub.bitfinex.com/v2/", "v2 REST API URL")
 )
 
 // Set BFX_APIKEY and BFX_SECRET as :
@@ -50,7 +50,7 @@ func main() {
 
 		log.Printf("order trades: %#v\n", os)
 	} else {
-		os, err := c.Orders.History(bitfinex.TradingPrefix + bitfinex.BTCUSD)
+		os, err := c.Orders.AllHistory()
 		if err != nil {
 			log.Fatalf("getting orders: %s", err)
 		}

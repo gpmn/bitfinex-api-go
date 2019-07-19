@@ -88,7 +88,6 @@ func (c *CandleService) HistoryWithQuery(
 	limit bitfinex.QueryLimit,
 	sort bitfinex.SortOrder,
 ) (*bitfinex.CandleSnapshot, error) {
-
 	if symbol == "" {
 		return nil, fmt.Errorf("symbol cannot be empty")
 	}

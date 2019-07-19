@@ -2,6 +2,8 @@ package bitfinex
 
 import (
 	"fmt"
+	"encoding/json"
+	"strconv"
 )
 
 func F64Slice(in []interface{}) ([]float64, error) {
@@ -15,6 +17,33 @@ func F64Slice(in []interface{}) ([]float64, error) {
 	}
 
 	return ret, nil
+}
+
+func ToInterfaceArray(i []interface{}) [][]interface{} {
+	newArr := make([][]interface{}, len(i))
+	for index, item := range i {
+		newArr[index] = item.([]interface{})
+	}
+	return newArr
+}
+
+func ToFloat64Array(i [][]interface{}) ([][]float64, error) {
+	newArr := make([][]float64, len(i))
+	for index, item := range i {
+		s, err := F64Slice(item)
+		if err != nil {
+			return nil, err
+		}
+		newArr[index] = s
+	}
+	return newArr, nil
+}
+
+func floatToJsonNumber(i interface{}) json.Number {
+	if r, ok := i.(json.Number); ok {
+		return r
+	}
+	return json.Number(strconv.FormatFloat(i.(float64), 'f', -1, 64))
 }
 
 func i64ValOrZero(i interface{}) int64 {

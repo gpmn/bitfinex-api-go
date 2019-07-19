@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"encoding/json"
-	"fmt"
 )
 
 type eventType struct {
@@ -10,7 +9,15 @@ type eventType struct {
 }
 
 type InfoEvent struct {
-	Version float64 `json:"version"`
+	Version  float64      `json:"version"`
+	ServerId string       `json:"serverId"`
+	Platform PlatformInfo `json:"platform"`
+	Code     int          `json:"code"`
+	Msg      string       `json:"msg"`
+}
+
+type PlatformInfo struct {
+	Status int `json:"status"`
 }
 
 type RawEvent struct {
@@ -45,15 +52,15 @@ type Capabilities struct {
 
 // error codes pulled from v2 docs & API usage
 const (
-	ErrorCodeUnknownEvent           int = 10000
-	ErrorCodeUnknownPair            int = 10001
-	ErrorCodeUnknownBookPrecision   int = 10011
-	ErrorCodeUnknownBookLength      int = 10012
-	ErrorCodeSubscriptionFailed     int = 10300
-	ErrorCodeAlreadySubscribed      int = 10301
-	ErrorCodeUnknownChannel         int = 10302
-	ErrorCodeUnsubscribeFailed      int = 10400
-	ErrorCodeNotSubscribed          int = 10401
+	ErrorCodeUnknownEvent         int = 10000
+	ErrorCodeUnknownPair          int = 10001
+	ErrorCodeUnknownBookPrecision int = 10011
+	ErrorCodeUnknownBookLength    int = 10012
+	ErrorCodeSubscriptionFailed   int = 10300
+	ErrorCodeAlreadySubscribed    int = 10301
+	ErrorCodeUnknownChannel       int = 10302
+	ErrorCodeUnsubscribeFailed    int = 10400
+	ErrorCodeNotSubscribed        int = 10401
 )
 
 type ErrorEvent struct {
@@ -94,7 +101,7 @@ type ConfEvent struct {
 }
 
 // onEvent handles all the event messages and connects SubID and ChannelID.
-func (c *Client) handleEvent(msg []byte) error {
+func (c *Client) handleEvent(socketId SocketId, msg []byte) error {
 	event := &eventType{}
 	err := json.Unmarshal(msg, event)
 	if err != nil {
@@ -108,9 +115,11 @@ func (c *Client) handleEvent(msg []byte) error {
 		if err != nil {
 			return err
 		}
-		err_open := c.handleOpen()
-		if err_open != nil {
-			return err_open
+		if i.Code == 0 && i.Version != 0 {
+			err_open := c.handleOpen(socketId)
+			if err_open != nil {
+				return err_open
+			}
 		}
 		c.listener <- &i
 	case "auth":
@@ -124,7 +133,7 @@ func (c *Client) handleEvent(msg []byte) error {
 		} else {
 			c.Authentication = RejectedAuthentication
 		}
-		c.handleAuthAck(&a)
+		c.handleAuthAck(socketId, &a)
 		c.listener <- &a
 		return nil
 	case "subscribed":
@@ -165,7 +174,7 @@ func (c *Client) handleEvent(msg []byte) error {
 		}
 		c.listener <- &ec
 	default:
-		return fmt.Errorf("unknown event: %s", msg) // TODO: or just log?
+		c.log.Warningf("unknown event: %s", msg)
 	}
 
 	//err = json.Unmarshal(msg, &e)

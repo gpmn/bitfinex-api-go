@@ -3,9 +3,10 @@ package bitfinex
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"math"
+	"fmt"
+	"strings"
 )
 
 // Prefixes for available pairs
@@ -76,6 +77,12 @@ func CandleResolutionFromString(str string) (CandleResolution, error) {
 	return OneMinute, fmt.Errorf("could not convert string to resolution: %s", str)
 }
 
+type PermissionType string
+const (
+	PermissionRead = "r"
+	PermissionWrite = "w"
+)
+
 // private type--cannot instantiate.
 type candleResolution string
 
@@ -86,6 +93,8 @@ type CandleResolution candleResolution
 const (
 	Bid OrderSide = 1
 	Ask OrderSide = 2
+	Long OrderSide = 1
+	Short OrderSide = 2
 )
 
 // Settings flags
@@ -218,6 +227,7 @@ type OrderUpdateRequest struct {
 	PriceAuxLimit float64 `json:"price_aux_limit,string,omitempty"`
 	Hidden        bool    `json:"hidden,omitempty"`
 	PostOnly      bool    `json:"postonly,omitempty"`
+	TimeInForce   string  `json:"tif,omitempty"`
 }
 
 // MarshalJSON converts the order object into the format required by the bitfinex
@@ -233,6 +243,7 @@ func (o *OrderUpdateRequest) MarshalJSON() ([]byte, error) {
 		PriceAuxLimit float64 `json:"price_aux_limit,string,omitempty"`
 		Hidden        bool    `json:"hidden,omitempty"`
 		PostOnly      bool    `json:"postonly,omitempty"`
+		TimeInForce   string  `json:"tif,omitempty"`
 		Flags         int     `json:"flags,omitempty"`
 	}{
 		ID:            o.ID,
@@ -242,6 +253,7 @@ func (o *OrderUpdateRequest) MarshalJSON() ([]byte, error) {
 		PriceTrailing: o.PriceTrailing,
 		PriceAuxLimit: o.PriceAuxLimit,
 		Delta:         o.Delta,
+		TimeInForce:   o.TimeInForce,
 	}
 
 	if o.Hidden {
@@ -1330,7 +1342,26 @@ func NewTickerFromRaw(symbol string, raw []interface{}) (t *Ticker, err error) {
 	if len(raw) < 10 {
 		return t, fmt.Errorf("data slice too short for ticker, expected %d got %d: %#v", 10, len(raw), raw)
 	}
+	// funding currency ticker
+	// ignore bid/ask period for now
+	if len(raw) == 13 {
+		t = &Ticker{
+			Symbol:          symbol,
+			Bid:             f64ValOrZero(raw[1]),
+			BidSize:         f64ValOrZero(raw[2]),
+			Ask:             f64ValOrZero(raw[4]),
+			AskSize:         f64ValOrZero(raw[5]),
+			DailyChange:     f64ValOrZero(raw[7]),
+			DailyChangePerc: f64ValOrZero(raw[8]),
+			LastPrice:       f64ValOrZero(raw[9]),
+			Volume:          f64ValOrZero(raw[10]),
+			High:            f64ValOrZero(raw[11]),
+			Low:             f64ValOrZero(raw[12]),
+		}
+		return t, nil
+	}
 
+	// all other tickers
 	t = &Ticker{
 		Symbol:          symbol,
 		Bid:             f64ValOrZero(raw[0]),
@@ -1345,7 +1376,11 @@ func NewTickerFromRaw(symbol string, raw []interface{}) (t *Ticker, err error) {
 		Low:             f64ValOrZero(raw[9]),
 	}
 
-	return
+	return t, nil
+}
+
+func NewTickerFromRestRaw(raw []interface{}) (t *Ticker, err error) {
+	return NewTickerFromRaw(raw[0].(string), raw[1:])
 }
 
 type bookAction byte
@@ -1362,26 +1397,29 @@ const (
 
 // BookUpdate represents an order book price update.
 type BookUpdate struct {
-	ID     int64      // the book update ID, optional
-	Symbol string     // book symbol
-	Price  float64    // updated price
-	Count  int64      // updated count, optional
-	Amount float64    // updated amount
-	Side   OrderSide  // side
-	Action BookAction // action (add/remove)
+	ID          int64       // the book update ID, optional
+	Symbol      string      // book symbol
+	Price       float64     // updated price
+	PriceJsNum  json.Number // update price as json.Number
+	Count       int64       // updated count, optional
+	Amount      float64     // updated amount
+	AmountJsNum json.Number // update amount as json.Number
+	Side        OrderSide   // side
+	Action      BookAction  // action (add/remove)
 }
 
 type BookUpdateSnapshot struct {
 	Snapshot []*BookUpdate
 }
 
-func NewBookUpdateSnapshotFromRaw(symbol, precision string, raw [][]float64) (*BookUpdateSnapshot, error) {
+func NewBookUpdateSnapshotFromRaw(symbol, precision string, raw [][]float64, raw_numbers interface{}) (*BookUpdateSnapshot, error) {
+	fmt.Println(raw_numbers)
 	if len(raw) <= 0 {
 		return nil, fmt.Errorf("data slice too short for book snapshot: %#v", raw)
 	}
 	snap := make([]*BookUpdate, len(raw))
 	for i, f := range raw {
-		b, err := NewBookUpdateFromRaw(symbol, precision, ToInterface(f))
+		b, err := NewBookUpdateFromRaw(symbol, precision, ToInterface(f), raw_numbers.([]interface{})[i])
 		if err != nil {
 			return nil, err
 		}
@@ -1397,13 +1435,16 @@ func IsRawBook(precision string) bool {
 // NewBookUpdateFromRaw creates a new book update object from raw data.  Precision determines how
 // to interpret the side (baked into Count versus Amount)
 // raw book updates [ID, price, qty], aggregated book updates [price, amount, count]
-func NewBookUpdateFromRaw(symbol, precision string, data []interface{}) (b *BookUpdate, err error) {
+func NewBookUpdateFromRaw(symbol, precision string, data []interface{}, raw_numbers interface{}) (b *BookUpdate, err error) {
 	if len(data) < 3 {
 		return b, fmt.Errorf("data slice too short for book update, expected %d got %d: %#v", 5, len(data), data)
 	}
 	var px float64
+	var px_num json.Number
 	var id, cnt int64
+	raw_num_array := raw_numbers.([]interface{})
 	amt := f64ValOrZero(data[2])
+	amt_num := floatToJsonNumber(raw_num_array[2])
 
 	var side OrderSide
 	var actionCtrl float64
@@ -1411,10 +1452,12 @@ func NewBookUpdateFromRaw(symbol, precision string, data []interface{}) (b *Book
 		// [ID, price, amount]
 		id = i64ValOrZero(data[0])
 		px = f64ValOrZero(data[1])
+		px_num = floatToJsonNumber(raw_num_array[1])
 		actionCtrl = px
 	} else {
 		// [price, amount, count]
 		px = f64ValOrZero(data[0])
+		px_num = floatToJsonNumber(raw_num_array[0])
 		cnt = i64ValOrZero(data[1])
 		actionCtrl = float64(cnt)
 	}
@@ -1433,13 +1476,15 @@ func NewBookUpdateFromRaw(symbol, precision string, data []interface{}) (b *Book
 	}
 
 	b = &BookUpdate{
-		Symbol: symbol,
-		Price:  math.Abs(px),
-		Count:  cnt,
-		Amount: math.Abs(amt),
-		Side:   side,
-		Action: action,
-		ID:     id,
+		Symbol:      symbol,
+		Price:       math.Abs(px),
+		PriceJsNum:  px_num,
+		Count:       cnt,
+		Amount:      math.Abs(amt),
+		AmountJsNum: amt_num,
+		Side:        side,
+		Action:      action,
+		ID:          id,
 	}
 
 	return
@@ -1509,4 +1554,321 @@ func NewCandleFromRaw(symbol string, resolution CandleResolution, raw []interfac
 	}
 
 	return
+}
+
+type Ledger struct {
+	ID		    int64
+	Currency	string
+	Nil1        float64
+	MTS		    int64
+	Nil2        float64
+	Amount	    float64
+	Balance		float64
+	Nil3        float64
+	Description	string
+}
+
+// NewLedgerFromRaw takes the raw list of values as returned from the websocket
+// service and tries to convert it into an Ledger.
+func NewLedgerFromRaw(raw []interface{}) (o *Ledger, err error) {
+	if len(raw) == 9 {
+		o = &Ledger{
+			ID:          int64(f64ValOrZero(raw[0])),
+			Currency:    sValOrEmpty(raw[1]),
+			Nil1:        f64ValOrZero(raw[2]),
+			MTS:         i64ValOrZero(raw[3]),
+			Nil2:        f64ValOrZero(raw[4]),
+			Amount:      f64ValOrZero(raw[5]),
+			Balance:     f64ValOrZero(raw[6]),
+			Nil3:		 f64ValOrZero(raw[7]),
+			Description: sValOrEmpty(raw[8]),
+			// API returns 3 Nil values, what do they map to?
+			// API documentation says ID is type integer but api returns a string
+		}
+	} else
+	{return o, fmt.Errorf("data slice too short for ledger: %#v", raw)
+	} 
+	return
+}
+
+type LedgerSnapshot struct {
+	Snapshot []*Ledger
+}
+
+// LedgerSnapshotFromRaw takes a raw list of values as returned from the websocket
+// service and tries to convert it into an LedgerSnapshot.
+func NewLedgerSnapshotFromRaw(raw []interface{}) (s *LedgerSnapshot, err error) {
+	if len(raw) == 0 {
+		return s, fmt.Errorf("data slice too short for ledgers: %#v", raw)
+	}
+
+	os := make([]*Ledger, 0)
+	switch raw[0].(type) {
+	case []interface{}:
+		for _, v := range raw {
+			if l, ok := v.([]interface{}); ok {
+				o, err := NewLedgerFromRaw(l)
+				if err != nil {
+					return s, err
+				}
+				os = append(os, o)
+			}
+		}
+	default:
+		return s, fmt.Errorf("not an ledger snapshot")
+	}
+	s = &LedgerSnapshot{Snapshot: os}
+	return
+}
+
+type CurrencyConf struct {
+	Currency  string
+	Label     string
+	Symbol    string
+	Pairs     []string
+	Pools     []string
+	Explorers ExplorerConf
+	Unit      string
+}
+
+type ExplorerConf struct {
+	BaseUri         string
+	AddressUri      string
+	TransactionUri  string
+}
+
+type CurrencyConfigMapping string
+
+const (
+	CurrencyLabelMap CurrencyConfigMapping = "pub:map:currency:label"
+	CurrencySymbolMap CurrencyConfigMapping = "pub:map:currency:sym"
+	CurrencyUnitMap CurrencyConfigMapping = "pub:map:currency:unit"
+	CurrencyExplorerMap CurrencyConfigMapping = "pub:map:currency:explorer"
+	CurrencyExchangeMap CurrencyConfigMapping = "pub:list:pair:exchange"
+)
+
+type RawCurrencyConf struct {
+	Mapping string
+	Data interface{}
+}
+
+func parseCurrencyLabelMap(config map[string]CurrencyConf, raw []interface{}) {
+	for _, rawLabel := range raw {
+		data := rawLabel.([]interface{})
+		cur := data[0].(string)
+		if val, ok := config[cur]; ok {
+			// add value
+			val.Label = data[1].(string)
+			config[cur] = val
+		} else {
+			// create new empty config instance
+			cfg := CurrencyConf{}
+			cfg.Label = data[1].(string)
+			cfg.Currency = cur
+			config[cur] = cfg
+		}
+	}
+}
+
+func parseCurrencySymbMap(config map[string]CurrencyConf, raw []interface{})  {
+	for _, rawLabel := range raw {
+		data := rawLabel.([]interface{})
+		cur := data[0].(string)
+		if val, ok := config[cur]; ok {
+			// add value
+			val.Symbol = data[1].(string)
+			config[cur] = val
+		} else {
+			// create new empty config instance
+			cfg := CurrencyConf{}
+			cfg.Symbol = data[1].(string)
+			cfg.Currency = cur
+			config[cur] = cfg
+		}
+	}
+}
+
+func parseCurrencyUnitMap(config map[string]CurrencyConf, raw []interface{})  {
+	for _, rawLabel := range raw {
+		data := rawLabel.([]interface{})
+		cur := data[0].(string)
+		if val, ok := config[cur]; ok {
+			// add value
+			val.Unit = data[1].(string)
+			config[cur] = val
+		} else {
+			// create new empty config instance
+			cfg := CurrencyConf{}
+			cfg.Unit = data[1].(string)
+			cfg.Currency = cur
+			config[cur] = cfg
+		}
+	}
+}
+
+func parseCurrencyExplorerMap(config map[string]CurrencyConf, raw []interface{})  {
+	for _, rawLabel := range raw {
+		data := rawLabel.([]interface{})
+		cur := data[0].(string)
+		explorers := data[1].([]interface{})
+		var cfg CurrencyConf
+		if val, ok := config[cur]; ok {
+			cfg = val
+		} else {
+			// create new empty config instance
+			cc := CurrencyConf{}
+			cc.Currency = cur
+			cfg = cc
+		}
+		ec := ExplorerConf{
+			explorers[0].(string),
+			explorers[1].(string),
+			explorers[2].(string),
+		}
+		cfg.Explorers = ec
+		config[cur] = cfg
+	}
+}
+
+func parseCurrencyExchangeMap(config map[string]CurrencyConf, raw []interface{})  {
+	for _, rs := range raw {
+		symbol := rs.(string)
+		var base, quote string
+		if len(symbol) > 6 {
+			base = strings.Split(symbol, ":")[0]
+			quote = strings.Split(symbol, ":")[1]
+		} else {
+			base = symbol[3:]
+			quote = symbol[:3]
+		}
+		// append if base exists in configs
+		if val, ok := config[base]; ok {
+			val.Pairs = append(val.Pairs, symbol)
+			config[base] = val
+		}
+		// append if quote exists in configs
+		if val, ok := config[quote]; ok {
+			val.Pairs = append(val.Pairs, symbol)
+			config[quote] = val
+		}
+	}
+}
+
+func NewCurrencyConfFromRaw(raw []RawCurrencyConf) ([]CurrencyConf, error) {
+	configMap := make(map[string]CurrencyConf)
+	for _, r := range raw {
+		switch (CurrencyConfigMapping(r.Mapping)) {
+		case CurrencyLabelMap:
+			data := r.Data.([]interface{})
+			parseCurrencyLabelMap(configMap, data)
+		case CurrencySymbolMap:
+			data := r.Data.([]interface{})
+			parseCurrencySymbMap(configMap, data)
+		case CurrencyUnitMap:
+			data := r.Data.([]interface{})
+			parseCurrencyUnitMap(configMap, data)
+		case CurrencyExplorerMap:
+			data := r.Data.([]interface{})
+			parseCurrencyExplorerMap(configMap, data)
+		case CurrencyExchangeMap:
+			data := r.Data.([]interface{})
+			parseCurrencyExchangeMap(configMap, data)
+		}
+	}
+	// convert map to array
+	configs := make([]CurrencyConf, 0)
+	for _, v := range configMap {
+		configs = append(configs, v)
+	}
+	return configs, nil
+}
+
+type StatKey string
+
+const (
+	FundingSizeKey StatKey = "funding.size"
+	CreditSizeKey StatKey = "credits.size"
+	CreditSizeSymKey StatKey = "credits.size.sym"
+	PositionSizeKey StatKey = "pos.size"
+)
+
+type Stat struct {
+	Period int64
+	Volume float64
+}
+
+type DerivativeStatusSnapshot struct {
+	Snapshot []*DerivativeStatus
+}
+
+type StatusType string
+const (
+	DerivativeStatusType StatusType = "deriv"
+)
+
+type DerivativeStatus struct {
+	Symbol               string
+	MTS                  int64
+	Price                float64
+	SpotPrice            float64
+	InsuranceFundBalance float64
+	FundingAccrued       float64
+	FundingStep          float64
+}
+
+func NewDerivativeStatusFromWsRaw(symbol string, raw []interface{}) (*DerivativeStatus, error) {
+	if len(raw) == 11 {
+		ds := &DerivativeStatus{
+			Symbol:               symbol,
+			MTS:                  i64ValOrZero(raw[0]),
+			// placeholder
+			Price:                f64ValOrZero(raw[2]),
+			SpotPrice:            f64ValOrZero(raw[3]),
+			// placeholder
+			InsuranceFundBalance: f64ValOrZero(raw[5]),
+			// placeholder
+			// placeholder
+			FundingAccrued:       f64ValOrZero(raw[8]),
+			FundingStep:          f64ValOrZero(raw[9]),
+			// placeholder
+		}
+		return ds, nil
+	} else {
+		return nil, fmt.Errorf("data slice too short for derivative status: %#v", raw)
+	}
+}
+
+
+func NewDerivativeStatusFromRaw(raw []interface{}) (*DerivativeStatus, error) {
+	if len(raw) == 12 {
+		ds := &DerivativeStatus{
+			Symbol:               sValOrEmpty(raw[0]),
+			MTS:                  i64ValOrZero(raw[1]),
+			// placeholder
+			Price:                f64ValOrZero(raw[3]),
+			SpotPrice:            f64ValOrZero(raw[4]),
+			// placeholder
+			InsuranceFundBalance: f64ValOrZero(raw[6]),
+			// placeholder
+			// placeholder
+			FundingAccrued:       f64ValOrZero(raw[9]),
+			FundingStep:          f64ValOrZero(raw[10]),
+			// placeholder
+		}
+		return ds, nil
+	} else {
+		return nil, fmt.Errorf("data slice too short for derivative status: %#v", raw)
+	}
+}
+
+func NewDerivativeSnapshotFromRaw(raw [][]interface{}) (*DerivativeStatusSnapshot, error) {
+	snapshot := make([]*DerivativeStatus, len(raw))
+	for i, rStatus := range raw {
+		pStatus, err := NewDerivativeStatusFromRaw(rStatus)
+		if err != nil {
+			return nil, err
+		}
+		snapshot[i] = pStatus
+	}
+	return &DerivativeStatusSnapshot{Snapshot: snapshot}, nil
 }

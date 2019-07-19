@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/bitfinexcom/bitfinex-api-go/v2"
 )
 
-func (c *Client) handleChannel(msg []byte) error {
+func (c *Client) handleChannel(socketId SocketId, msg []byte) error {
 	var raw []interface{}
 	err := json.Unmarshal(msg, &raw)
 	if err != nil {
@@ -41,14 +40,14 @@ func (c *Client) handleChannel(msg []byte) error {
 				if checksum, ok := raw[2].(float64); ok {
 					return c.handleChecksumChannel(chanID, int(checksum))
 				} else {
-					log.Fatal("Unable to parse checksum")
+					c.log.Error("Unable to parse checksum")
 				}
 			default:
 				body := raw[2].([]interface{})
-				return c.handlePublicChannel(chanID, sub.Request.Channel, data, body)
+				return c.handlePublicChannel(chanID, sub.Request.Channel, data, body, msg)
 			}
 		case []interface{}:
-			return c.handlePublicChannel(chanID, sub.Request.Channel, "", data)
+			return c.handlePublicChannel(chanID, sub.Request.Channel, "", data, msg)
 		}
 	} else {
 		return c.handlePrivateChannel(raw)
@@ -68,9 +67,9 @@ func (c *Client) handleChecksumChannel(chanId int64, checksum int) error {
 		oChecksum := orderbook.Checksum()
 		// compare bitfinex checksum with local checksum
 		if bChecksum == oChecksum {
-			log.Printf("Orderbook '%s' checksum verification successful.", symbol)
+			c.log.Debugf("Orderbook '%s' checksum verification successful.", symbol)
 		} else {
-			fmt.Printf("Orderbook '%s' checksum is invalid got %d bot got %d. Data Out of sync, reconnecting.",
+			c.log.Warningf("Orderbook '%s' checksum is invalid got %d bot got %d. Data Out of sync, reconnecting.",
 				symbol, bChecksum, oChecksum)
 			err := c.sendUnsubscribeMessage(context.Background(), chanId)
 			if err != nil {
@@ -84,7 +83,7 @@ func (c *Client) handleChecksumChannel(chanId int64, checksum int) error {
 			}
 			_, err_sub := c.Subscribe(context.Background(), newSub)
 			if err_sub != nil {
-				log.Printf("could not resubscribe: %s", err_sub.Error())
+				c.log.Warningf("could not resubscribe: %s", err_sub.Error())
 				return err_sub
 			}
 		}
@@ -92,36 +91,31 @@ func (c *Client) handleChecksumChannel(chanId int64, checksum int) error {
 	return nil
 }
 
-func (c *Client) handlePublicChannel(chanID int64, channel, objType string, data []interface{}) error {
+func (c *Client) handlePublicChannel(chanID int64, channel, objType string, data []interface{}, raw_msg []byte) error {
 	// unauthenticated data slice
-	// returns interface{} (which is really [][]float64)
-	obj, err := c.processDataSlice(data)
-	if err != nil {
-		return err
-	}
 	// public data is returned as raw interface arrays, use a factory to convert to raw type & publish
 	if factory, ok := c.factories[channel]; ok {
-		flt := obj.([][]float64)
-		if len(flt) == 1 {
-			// single item
-			arr := make([]interface{}, len(flt[0]))
-			for i, ft := range flt[0] {
-				arr[i] = ft
-			}
-			msg, err := factory.Build(chanID, objType, arr)
-			if err != nil {
-				return err
-			}
-			if msg != nil {
-				c.listener <- msg
-			}
-		} else if len(flt) > 1 {
-			msg, err := factory.BuildSnapshot(chanID, flt)
-			if err != nil {
-				return err
-			}
-			if msg != nil {
-				c.listener <- msg
+		// convert to type array of interfaces
+		if len(data) > 0 {
+			if _, ok := data[0].([]interface{}); ok {
+				interfaceArray := bitfinex.ToInterfaceArray(data)
+				// snapshot item
+				msg, err := factory.BuildSnapshot(chanID, interfaceArray, raw_msg)
+				if err != nil {
+					return err
+				}
+				if msg != nil {
+					c.listener <- msg
+				}
+			} else {
+				// single item
+				msg, err := factory.Build(chanID, objType, data, raw_msg)
+				if err != nil {
+					return err
+				}
+				if msg != nil {
+					c.listener <- msg
+				}
 			}
 		}
 	} else {
@@ -133,10 +127,10 @@ func (c *Client) handlePublicChannel(chanID int64, channel, objType string, data
 
 func (c *Client) handlePrivateChannel(raw []interface{}) error {
 	// authenticated data slice, or a heartbeat
-	if raw[1].(string) == "hb" {
+	if val, ok := raw[1].(string); ok && val == "hb" {
 		chanID, ok := raw[0].(float64)
 		if !ok {
-			log.Printf("could not find chanID: %#v", raw)
+			c.log.Warningf("could not find chanID: %#v", raw)
 			return nil
 		}
 		c.handleHeartbeat(int64(chanID))
@@ -166,38 +160,6 @@ func (c *Client) handleHeartbeat(chanID int64) {
 type unsubscribeMsg struct {
 	Event  string `json:"event"`
 	ChanID int64  `json:"chanId"`
-}
-
-func (c *Client) processDataSlice(data []interface{}) (interface{}, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("unexpected data slice: %v", data)
-	}
-
-	var items [][]float64
-	switch data[0].(type) {
-	case []interface{}: // [][]float64
-		for _, e := range data {
-			if s, ok := e.([]interface{}); ok {
-				item, err := bitfinex.F64Slice(s)
-				if err != nil {
-					return nil, err
-				}
-				items = append(items, item)
-			} else {
-				return nil, fmt.Errorf("expected slice of float64 slices but got: %v", data)
-			}
-		}
-	case float64: // []float64
-		item, err := bitfinex.F64Slice(data)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	default:
-		return nil, fmt.Errorf("unexpected data slice: %v", data)
-	}
-
-	return items, nil
 }
 
 // public msg: [ChanID, [Data]]
@@ -466,7 +428,7 @@ func (c *Client) convertRaw(term string, raw []interface{}) interface{} {
 		}
 		return o // better than nothing
 	default:
-		log.Printf("unhandled channel data, term: %s", term)
+		c.log.Warningf("unhandled channel data, term: %s", term)
 	}
 
 	return fmt.Errorf("term %q not recognized", term)
