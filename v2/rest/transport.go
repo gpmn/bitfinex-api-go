@@ -48,7 +48,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 		return nil, err
 	}
 
-	err = h.do(httpReq, &raw)
+	resp, err := h.do(httpReq, &raw)
 	if err != nil {
 		log.Printf("HttpTransport.Request - http.do failed : %v", err)
 		if resp != nil {
@@ -74,7 +74,7 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	response := newResponse(resp)
 	err = checkResponse(response)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if v != nil {
@@ -85,5 +85,5 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 		}
 	}
 
-	return nil
+	return nil, nil
 }
