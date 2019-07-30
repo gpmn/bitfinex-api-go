@@ -3,9 +3,11 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bitfinexcom/bitfinex-api-go/v2"
+	"log"
 	"strings"
 	"sync"
+
+	"github.com/bitfinexcom/bitfinex-api-go/v2"
 )
 
 type messageFactory interface {
@@ -59,6 +61,10 @@ func (f *TradeFactory) Build(chanID int64, objType string, raw []interface{}, ra
 	if "tu" == objType {
 		return nil, nil // do not process TradeUpdate messages on public feed, only need to process TradeExecution (first copy seen)
 	}
+	if "te" != objType {
+		log.Printf("objType '%s' invalid : %s", objType, string(raw_bytes))
+		return nil, fmt.Errorf("objType invalid")
+	}
 	if err == nil {
 		trade, err := bitfinex.NewTradeFromRaw(sub.Request.Symbol, raw)
 		return trade, err
@@ -80,16 +86,16 @@ func (f *TradeFactory) BuildSnapshot(chanID int64, raw [][]interface{}, raw_byte
 
 type BookFactory struct {
 	*subscriptions
-	orderbooks     map[string]*Orderbook
-	manageBooks    bool
-	lock           sync.Mutex
+	orderbooks  map[string]*Orderbook
+	manageBooks bool
+	lock        sync.Mutex
 }
 
 func newBookFactory(subs *subscriptions, obs map[string]*Orderbook, manageBooks bool) *BookFactory {
 	return &BookFactory{
 		subscriptions: subs,
-		orderbooks: obs,
-		manageBooks: manageBooks,
+		orderbooks:    obs,
+		manageBooks:   manageBooks,
 	}
 }
 
@@ -97,7 +103,7 @@ func ConvertBytesToJsonNumberArray(raw_bytes []byte) ([]interface{}, error) {
 	var raw_json_number []interface{}
 	d := json.NewDecoder(strings.NewReader(string(raw_bytes)))
 	d.UseNumber()
-	str_conv_err := d.Decode(&raw_json_number);
+	str_conv_err := d.Decode(&raw_json_number)
 	if str_conv_err != nil {
 		return nil, str_conv_err
 	}
