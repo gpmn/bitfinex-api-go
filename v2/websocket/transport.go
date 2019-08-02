@@ -56,9 +56,9 @@ func (w *ws) Connect() error {
 	w.log.Info("connecting ws to %s", w.BaseURL)
 	ws, resp, err := d.Dial(w.BaseURL, nil)
 	if err != nil {
-		if err == websocket.ErrBadHandshake {
-			w.log.Errorf("bad handshake: status code %d", resp.StatusCode)
-		}
+		//if err == websocket.ErrBadHandshake {
+		w.log.Errorf("ws.Connect: d.Dial failed, error : %v, resp:%+v", err, *resp)
+		//}
 		return err
 	}
 	w.ws = ws
