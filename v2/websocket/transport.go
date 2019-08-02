@@ -123,7 +123,14 @@ func (w *ws) listenWs() {
 				return
 			}
 			w.log.Debugf("srv->ws: %s", string(msg))
-			w.downstream <- msg
+			func() { // fixup :: panic : sending to closed channel
+				defer func() {
+					if err := recover(); nil != err {
+						w.log.Errorf("failed when w.downstream <- msg, %v", err)
+					}
+				}()
+				w.downstream <- msg
+			}()
 		}
 	}
 }
