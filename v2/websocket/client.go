@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -276,18 +277,19 @@ func (c *Client) listenDisconnect() {
 		case <-c.shutdown:
 			return
 		case hbErr := <-c.subscriptions.ListenDisconnect(): // subscription heartbeat timeout
-			c.log.Warningf("heartbeat disconnect: %s", hbErr.Error.Error())
+			log.Printf("heartbeat disconnect: %s", hbErr.Error.Error())
 			c.mtx.Lock()
 			if socket, ok := c.sockets[hbErr.Subscription.SocketId]; ok {
 				if socket.IsConnected {
-					c.log.Infof("restarting socket (id=%d) connection", socket.Id)
+					log.Printf("restarting socket (id=%d) connection", socket.Id)
 					socket.IsConnected = false
 					// reconnect to the socket
 					go func() {
 						c.closeAsyncAndWait(socket, c.parameters.ShutdownTimeout)
 						err := c.reconnect(socket, hbErr.Error)
+						log.Printf("c.reconnect - socket.IsConnected %v", socket.IsConnected)
 						if err != nil {
-							c.log.Warningf("socket disconnect: %s", err.Error())
+							log.Printf("socket disconnect: %s", err.Error())
 							return
 						}
 					}()
@@ -322,9 +324,11 @@ func (c *Client) registerPublicFactories() {
 }
 
 func (c *Client) reconnect(socket *Socket, err error) error {
+	log.Printf("try to reconnect ....")
 	c.mtx.RLock()
 	if c.terminal {
 		// dont attempt to reconnect if terminal
+		log.Printf("is terminal, do not reconnect")
 		return err
 	}
 	if !c.parameters.AutoReconnect {
@@ -334,19 +338,19 @@ func (c *Client) reconnect(socket *Socket, err error) error {
 	c.mtx.RUnlock()
 	reconnectTry := 0
 	for ; reconnectTry < c.parameters.ReconnectAttempts; reconnectTry++ {
-		c.log.Debugf("socket (id=%d) waiting %s until reconnect...", socket.Id, c.parameters.ReconnectInterval)
+		log.Printf("socket (id=%d) waiting %s until reconnect...", socket.Id, c.parameters.ReconnectInterval)
 		time.Sleep(c.parameters.ReconnectInterval)
-		c.log.Infof("socket (id=%d) reconnect attempt %d/%d", socket.Id, reconnectTry+1, c.parameters.ReconnectAttempts)
+		log.Printf("socket (id=%d) reconnect attempt %d/%d", socket.Id, reconnectTry+1, c.parameters.ReconnectAttempts)
 		err := c.reconnectSocket(socket)
 		if err == nil {
-			c.log.Debugf("reconnect OK")
+			log.Printf("reconnect OK")
 			reconnectTry = 0
 			return nil
 		}
-		c.log.Warningf("socket (id=%d) reconnect failed: %s", socket.Id, err.Error())
+		log.Printf("socket (id=%d) reconnect failed: %s", socket.Id, err.Error())
 	}
 	if err != nil {
-		c.log.Errorf("socket (id=%d) could not reconnect: %s", socket.Id, err.Error())
+		log.Printf("socket (id=%d) could not reconnect: %s", socket.Id, err.Error())
 	}
 	return err
 }
@@ -419,7 +423,7 @@ func (c *Client) listenUpstream(socket *Socket) {
 			if msg != nil {
 				err := c.handleMessage(socket.Id, msg)
 				if err != nil {
-					c.log.Warning(err)
+					log.Printf("handleMessage failed : %v", err)
 				}
 			}
 		}
@@ -487,7 +491,7 @@ func (c *Client) checkResubscription(socketId SocketId) {
 		defer cancel()
 		_, err_flag := c.EnableFlag(ctx, bitfinex.Checksum)
 		if err_flag != nil {
-			c.log.Errorf("could not enable checksum flag %s ", err_flag)
+			log.Printf("could not enable checksum flag %s ", err_flag)
 		}
 	}
 	if c.parameters.ResubscribeOnReconnect && socket.ResetSubscriptions != nil {
@@ -501,7 +505,7 @@ func (c *Client) checkResubscription(socketId SocketId) {
 			c.log.Infof("socket (id=%d) resubscribing to %s with nonce %s", socket.Id, sub.Request.String(), sub.Request.SubID)
 			_, err := c.subscribeBySocket(ctx, socket, sub.Request)
 			if err != nil {
-				c.log.Errorf("could not resubscribe: %s", err.Error())
+				log.Printf("could not resubscribe: %s", err.Error())
 			}
 		}
 		socket.ResetSubscriptions = nil
@@ -544,11 +548,11 @@ func (c *Client) handleAuthAck(socketId SocketId, auth *AuthEvent) {
 		socket.IsAuthenticated = true
 		err = c.subscriptions.activate(auth.SubID, auth.ChanID)
 		if err != nil {
-			c.log.Errorf("could not activate auth subscription: %s", err.Error())
+			log.Printf("could not activate auth subscription: %s", err.Error())
 		}
 		c.checkResubscription(socketId)
 	} else {
-		c.log.Error("authentication failed")
+		log.Printf("authentication failed")
 	}
 }
 

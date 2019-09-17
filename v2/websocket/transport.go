@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -140,6 +141,7 @@ func (w *ws) Listen() <-chan []byte {
 }
 
 func (w *ws) stop(err error) {
+	log.Printf("ws.stop called : %v.", err)
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	if w.ws != nil {
