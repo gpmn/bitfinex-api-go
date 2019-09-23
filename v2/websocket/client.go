@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -287,7 +288,7 @@ func (c *Client) listenDisconnect() {
 					go func() {
 						c.closeAsyncAndWait(socket, c.parameters.ShutdownTimeout)
 						err := c.reconnect(socket, hbErr.Error)
-						log.Printf("c.reconnect - socket.IsConnected %v", socket.IsConnected)
+						log.Printf("listenDisconnect - c.reconnect return %v", err)
 						if err != nil {
 							log.Printf("socket disconnect: %s", err.Error())
 							return
@@ -424,7 +425,13 @@ func (c *Client) listenUpstream(socket *Socket) {
 				err := c.handleMessage(socket.Id, msg)
 				if err != nil {
 					log.Printf("handleMessage failed : %v", err)
+
+					if strings.Contains(err.Error(), "could not find subscription for channel ID") {
+						os.Exit(100)
+						panic(err)
+					}
 				}
+
 			}
 		}
 	}
