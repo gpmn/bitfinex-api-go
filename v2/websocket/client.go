@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -424,14 +423,8 @@ func (c *Client) listenUpstream(socket *Socket) {
 			if msg != nil {
 				err := c.handleMessage(socket.Id, msg)
 				if err != nil {
-					log.Printf("handleMessage failed : %v", err)
-
-					if strings.Contains(err.Error(), "could not find subscription for channel ID") {
-						os.Exit(100)
-						panic(err)
-					}
+					log.Printf("handleMessage failed : %v, msg:%s", err, string(msg))
 				}
-
 			}
 		}
 	}

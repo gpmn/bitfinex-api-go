@@ -74,6 +74,10 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	response := newResponse(resp)
 	err = checkResponse(response)
 	if err != nil {
+		if response.String() == `{ "error": "ERR_RATE_LIMIT" }` {
+			return fmt.Errorf("rate limit")
+		}
+
 		return nil, err
 	}
 
