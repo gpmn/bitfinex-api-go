@@ -52,7 +52,7 @@ func (h HttpTransport) Request(req Request) ([]interface{}, error) {
 	if err != nil {
 		log.Printf("HttpTransport.Request - http.do failed : %v", err)
 		if resp != nil {
-			return nil, fmt.Errorf("could not parse response: %s", resp.Response.Status)
+			return nil, fmt.Errorf("could not parse response : %s", resp.String())
 		} else {
 			return nil, fmt.Errorf("%v", err)
 		}
@@ -74,6 +74,7 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	response := newResponse(resp)
 	err = checkResponse(response)
 	if err != nil {
+		log.Printf("response invalid : %s", response.String())
 		if response.String() == `{ "error": "ERR_RATE_LIMIT" }` {
 			return nil, fmt.Errorf("rate limit")
 		}
@@ -84,7 +85,7 @@ func (h HttpTransport) do(req *http.Request, v interface{}) (*Response, error) {
 	if v != nil {
 		err = json.Unmarshal(response.Body, v)
 		if err != nil {
-			log.Printf("HttpTransport.do - json.Unmarshal failed : %v", err)
+			log.Printf("HttpTransport.do - json.Unmarshal failed : %v, resp:%s", err, response.String())
 			return response, err
 		}
 	}
