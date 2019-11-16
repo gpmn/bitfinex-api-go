@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -204,6 +205,7 @@ func newResponse(r *http.Response) *Response {
 	lr := io.LimitReader(r.Body, 8388608)
 	body, err := ioutil.ReadAll(lr)
 	if err != nil {
+		log.Printf("newResponse - ioutil.ReadAll failed : %v", err)
 		body = []byte(`Error reading body:` + err.Error())
 	}
 
