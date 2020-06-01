@@ -392,6 +392,7 @@ func (c *Client) connectSocket(socketId SocketId) error {
 	err := socket.Asynchronous.Connect()
 	if err != nil {
 		// unable to establish connection
+		log.Printf("c.connectSocket - socket.Asynchronous.Connect failed : %s", err.Error())
 		return err
 	}
 	socket.IsConnected = true
@@ -408,6 +409,7 @@ func (c *Client) reconnectSocket(socket *Socket) error {
 	// establish a new connection
 	err := c.connectSocket(socket.Id)
 	if err != nil {
+		log.Printf("c.reconnectSocket - c.connectSocket failed : %s", err.Error())
 		return err
 	}
 	return nil
@@ -497,6 +499,7 @@ func (c *Client) checkResubscription(socketId SocketId) {
 	if c.parameters.ResubscribeOnReconnect && socket.ResetSubscriptions != nil {
 		for _, sub := range socket.ResetSubscriptions {
 			if sub.Request.Event == "auth" {
+				log.Printf("c.checkResubscription - ignore since sub.Request.Event not 'auth':%s", sub.Request.Event)
 				continue
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -509,6 +512,9 @@ func (c *Client) checkResubscription(socketId SocketId) {
 			}
 		}
 		socket.ResetSubscriptions = nil
+	} else {
+		log.Printf("c.checkResubscription - no resub since ResubscribeOnReconnect:%v, socket.ResetSubscriptions==nil:%v",
+			c.parameters.ResubscribeOnReconnect, socket.ResetSubscriptions != nil)
 	}
 }
 
@@ -533,6 +539,7 @@ func (c *Client) handleOpen(socketId SocketId) error {
 		return nil
 	}
 	// resubscribe public channels (we will handle authenticated in authAck)
+	log.Printf("c.handleOpen - will call c.checkResubscription")
 	c.checkResubscription(socketId)
 	return nil
 }
@@ -550,6 +557,7 @@ func (c *Client) handleAuthAck(socketId SocketId, auth *AuthEvent) {
 		if err != nil {
 			log.Printf("could not activate auth subscription: %s", err.Error())
 		}
+		log.Printf("c.handleAuthAck - will call c.checkResubscription")
 		c.checkResubscription(socketId)
 	} else {
 		log.Printf("authentication failed")
