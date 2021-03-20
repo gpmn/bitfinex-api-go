@@ -27,7 +27,7 @@ func (u *EpochNonceGenerator) GetNonce() string {
 
 func NewEpochNonceGenerator() *EpochNonceGenerator {
 	return &EpochNonceGenerator{
-		nonce: uint64(time.Now().Unix()) * 1000,
+		nonce: uint64(time.Now().Unix()) * 1000000,
 	}
 }
 
